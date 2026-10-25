@@ -1,0 +1,2369 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>aiogram-fsm-inspector</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            'bg':     'rgb(var(--bg) / <alpha-value>)',
+            'surface':'rgb(var(--surface) / <alpha-value>)',
+            'line':   'rgb(var(--line) / <alpha-value>)',
+            'fg':     'rgb(var(--fg) / <alpha-value>)',
+            'muted':  'rgb(var(--muted) / <alpha-value>)',
+            'dim':    'rgb(var(--dim) / <alpha-value>)',
+            'danger': '#ef4444',
+            'success':'#10b981',
+            'warning':'#f59e0b',
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+          },
+          keyframes: {
+            flash: {
+              '0%': { backgroundColor: 'rgb(var(--fg) / 0.15)' },
+              '100%': { backgroundColor: 'transparent' },
+            },
+            pulseDot: {
+              '0%, 100%': { opacity: '1' },
+              '50%': { opacity: '0.35' },
+            },
+          },
+          animation: {
+            flash: 'flash 1.2s ease-out',
+            'pulse-dot': 'pulseDot 2s ease-in-out infinite',
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    :root {
+      --bg: 10 10 10;
+      --surface: 20 20 20;
+      --line: 38 38 38;
+      --fg: 240 240 240;
+      --muted: 150 150 150;
+      --dim: 100 100 100;
+    }
+    html.light {
+      --bg: 250 250 250;
+      --surface: 244 244 244;
+      --line: 226 226 226;
+      --fg: 12 12 12;
+      --muted: 110 110 110;
+      --dim: 160 160 160;
+    }
+    body {
+      font-feature-settings: 'cv11', 'ss01', 'ss03';
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: optimizeLegibility;
+    }
+    .tabular { font-variant-numeric: tabular-nums; }
+    .data {
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.01em;
+      font-feature-settings: 'tnum', 'ss01', 'cv11';
+    }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgb(var(--line)); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgb(var(--dim)); }
+    .dot { width: 6px; height: 6px; border-radius: 9999px; display: inline-block; }
+    .dot-filled { background: rgb(var(--fg)); }
+    .dot-outline { border: 1px solid rgb(var(--dim)); background: transparent; }
+    input:focus-visible, button:focus-visible, select:focus-visible, textarea:focus-visible {
+      outline: 2px solid rgb(var(--fg));
+      outline-offset: 1px;
+    }
+    .json-editor {
+      font-variant-numeric: tabular-nums;
+      font-feature-settings: 'tnum', 'cv11';
+      letter-spacing: -0.005em;
+      line-height: 1.65;
+      tab-size: 2;
+      resize: vertical;
+    }
+  </style>
+</head>
+<body class="bg-bg text-fg font-sans antialiased min-h-screen">
+
+  <!-- ═══════════════ HEADER ═══════════════ -->
+  <header class="sticky top-0 z-30 bg-bg/90 backdrop-blur border-b border-line">
+    <div class="px-6 h-14 flex items-center gap-6">
+      <a href="#" onclick="showList(); return false;"
+         class="text-[13px] font-semibold tracking-[-0.01em] hover:opacity-80 transition-opacity flex items-center gap-2">
+        <span class="w-2.5 h-2.5 rounded-sm bg-fg"></span>
+        <span>aiogram-fsm-inspector</span>
+      </a>
+
+      <!-- Redesigned Status Pill Widget -->
+      <div class="flex items-center gap-2">
+        <!-- Live Connection Pill -->
+        <div id="ws-badge"
+             class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 transition-colors">
+          <span id="ws-indicator" class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse-dot"></span>
+          <span id="ws-status-text" class="tracking-[-0.005em]">Онлайн</span>
+        </div>
+
+        <!-- Sessions Count Pill -->
+        <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border border-line bg-surface/60 text-muted">
+          <svg class="w-3.5 h-3.5 text-dim" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+          <span class="text-fg font-medium tabular" id="total-count">0</span>
+          <span id="sessions-counter-label" class="tracking-[-0.005em]">сессий в памяти</span>
+        </div>
+
+        <!-- ─── ACTIVE BOT SELECTOR (Select Bot + All Bots) ─── -->
+        <div id="bot-selector-container" class="relative">
+          <button id="bot-selector-trigger" type="button"
+                  class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium border border-line bg-surface/80 hover:bg-surface text-fg transition-colors focus:outline-none">
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span id="selected-bot-label" class="font-medium truncate max-w-[140px]">Все боты</span>
+            <span id="detected-bots-badge" class="px-1.5 py-0.2 text-[10px] bg-line rounded text-muted font-mono">1</span>
+            <svg id="bot-chevron" class="w-3.5 h-3.5 text-dim transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="m6 9 6 6 6-6"/>
+            </svg>
+          </button>
+
+          <!-- Dropdown Menu for Bots -->
+          <div id="bot-selector-menu"
+               class="hidden absolute left-0 top-full mt-1.5 w-72 bg-surface border border-line rounded-lg shadow-2xl z-50 overflow-hidden flex flex-col">
+            <div class="px-3 py-2 text-[10px] uppercase font-bold tracking-wider text-muted border-b border-line bg-bg/80 flex items-center justify-between">
+              <span data-i18n="select_bot_title">Выбор бота (Select Bot)</span>
+              <button id="rescan-bots-btn" class="text-[10px] text-muted hover:text-fg underline normal-case transition-colors" title="Поиск ботов на портах 8080-8088">
+                обновить
+              </button>
+            </div>
+
+            <div id="bot-list-dropdown" class="p-1 space-y-0.5 max-h-60 overflow-y-auto text-xs">
+              <!-- Dynamically populated -->
+            </div>
+
+            <div class="p-1.5 border-t border-line bg-bg/40">
+              <button id="add-bot-port-btn" class="w-full px-2 py-1.5 text-left text-xs rounded hover:bg-surface text-muted hover:text-fg flex items-center gap-1.5 transition-colors">
+                <svg class="w-3.5 h-3.5 text-dim" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                <span data-i18n="add_bot_btn">+ Подключить порт / URL</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex-1"></div>
+
+      <div class="flex items-center gap-2">
+        <!-- Presets Button -->
+        <button id="presets-modal-btn"
+                class="px-2.5 py-1 text-xs border border-line rounded-md hover:bg-surface text-muted hover:text-fg transition-colors flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/>
+          </svg>
+          <span data-i18n="presets">Пресеты</span>
+          <span id="presets-count-badge" class="text-[10px] tabular bg-line px-1 rounded">0</span>
+        </button>
+
+        <!-- Language Switcher (RU / EN) -->
+        <button id="lang-toggle-btn"
+                class="px-2.5 py-1 text-xs font-medium border border-line rounded-md hover:bg-surface text-muted hover:text-fg transition-colors tracking-wider"
+                title="Переключить язык / Toggle language">
+          <span id="lang-label">EN</span>
+        </button>
+
+        <!-- Theme Toggle -->
+        <button id="theme-toggle" class="p-2 rounded-md hover:bg-surface text-muted hover:text-fg transition-colors" title="Переключить тему">
+          <svg id="icon-moon" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+          <svg id="icon-sun" class="w-4 h-4 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="4"/>
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       VIEW: SESSIONS LIST
+  ═══════════════════════════════════════════════════════════════ -->
+  <main id="view-list" class="max-w-[1400px] mx-auto px-6 py-8">
+    <div class="flex items-center justify-between mb-6 gap-3">
+      <h1 class="text-[17px] font-semibold tracking-[-0.015em]" data-i18n="sessions_title">Активные сессии</h1>
+
+      <div class="flex items-center gap-2">
+        <div class="relative">
+          <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-dim pointer-events-none"
+               viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+          </svg>
+          <input id="search-input" type="text"
+                 placeholder="Поиск по user_id, @username, шагу FSM…"
+                 class="bg-transparent border border-line rounded-md pl-9 pr-3 py-1.5 text-[13px] w-80
+                        placeholder:text-dim tracking-[-0.005em]
+                        focus:outline-none focus:border-fg transition-colors">
+        </div>
+      </div>
+    </div>
+
+    <div class="border border-line rounded-lg overflow-hidden">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b border-line text-[10px] text-muted uppercase tracking-[0.08em]">
+            <th class="text-left px-4 py-2.5 font-medium" data-i18n="col_user">Пользователь</th>
+            <th class="text-left px-4 py-2.5 font-medium" data-i18n="col_bot">Бот</th>
+            <th class="text-left px-4 py-2.5 font-medium" data-i18n="col_state">FSM Состояние</th>
+            <th class="text-left px-4 py-2.5 font-medium w-28" data-i18n="col_data">Данные</th>
+            <th class="text-left px-4 py-2.5 font-medium w-36" data-i18n="col_updated">Активность</th>
+            <th class="w-10"></th>
+          </tr>
+        </thead>
+        <tbody id="sessions-body" class="divide-y divide-line/70">
+          <tr>
+            <td colspan="6" class="px-4 py-8 text-center text-dim italic" data-i18n="waiting_sessions">
+              Ожидание входящих сессий...
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="flex items-center justify-between mt-4 text-xs text-muted">
+      <div class="tabular tracking-[-0.005em]">
+        <span data-i18n="showing_prefix">Отображается: </span>
+        <span class="text-fg font-medium" id="showing-count">0</span>
+        <span class="text-dim mx-2">·</span>
+        <span data-i18n="ws_enabled">WebSocket синхронизация активна</span>
+      </div>
+      <button onclick="refreshAll()" class="px-3 py-1.5 border border-line rounded-md hover:bg-surface text-fg text-[12px] transition-colors" data-i18n="manual_refresh">
+        Обновить список
+      </button>
+    </div>
+  </main>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       VIEW: SESSION DETAIL
+  ═══════════════════════════════════════════════════════════════ -->
+  <main id="view-session" class="hidden max-w-[1400px] mx-auto px-6 py-8">
+    <!-- Breadcrumb -->
+    <div class="flex items-center gap-2 text-sm mb-6">
+      <button onclick="showList()"
+              class="inline-flex items-center gap-1 text-muted hover:text-fg transition-colors">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M19 12H5M12 19l-7-7 7-7"/>
+        </svg>
+        <span class="tracking-[-0.005em]" data-i18n="breadcrumb_sessions">Сессии</span>
+      </button>
+      <span class="text-dim">/</span>
+      <span class="text-fg data text-[13px]" id="bc-user">—</span>
+    </div>
+
+    <!-- Two-column layout -->
+    <div class="grid grid-cols-[280px_1fr] gap-6 items-start">
+      <!-- ─── LEFT: META + ACTIONS ─── -->
+      <aside class="space-y-4 min-w-0">
+        <!-- Meta Context -->
+        <div class="border border-line rounded-lg p-4 space-y-3">
+          <div class="text-[10px] uppercase tracking-[0.08em] text-muted mb-1" data-i18n="session_context">Контекст сессии</div>
+          <dl class="space-y-2.5 text-[13px]">
+            <div class="flex justify-between gap-3">
+              <dt class="text-muted">user_id</dt>
+              <dd class="data text-fg truncate" id="meta-user">—</dd>
+            </div>
+            <div class="flex justify-between gap-3">
+              <dt class="text-muted">username</dt>
+              <dd class="data text-fg truncate" id="meta-username">—</dd>
+            </div>
+            <div class="flex justify-between gap-3">
+              <dt class="text-muted">chat_id</dt>
+              <dd class="data text-fg truncate" id="meta-chat">—</dd>
+            </div>
+            <div class="flex justify-between gap-3">
+              <dt class="text-muted">bot_id</dt>
+              <dd class="data text-fg truncate" id="meta-bot">—</dd>
+            </div>
+            <div class="flex justify-between gap-3">
+              <dt class="text-muted">destiny</dt>
+              <dd class="data text-fg truncate" id="meta-destiny">default</dd>
+            </div>
+            <div class="flex justify-between gap-3 pt-2 border-t border-line">
+              <dt class="text-muted" data-i18n="updated_label">Обновлено</dt>
+              <dd class="data text-fg" id="meta-updated">—</dd>
+            </div>
+          </dl>
+        </div>
+
+        <!-- Presets Quick Apply (Custom Dropdown) -->
+        <div class="border border-line rounded-lg p-3 space-y-2.5">
+          <div class="flex items-center justify-between">
+            <span class="text-[10px] uppercase tracking-[0.08em] font-medium text-muted" data-i18n="apply_preset_title">
+              Применить пресет
+            </span>
+            <span id="presets-count-badge-inline" class="text-[10px] text-dim font-medium">0</span>
+          </div>
+
+          <div class="space-y-2 relative">
+            <!-- Custom Preset Trigger Button -->
+            <button id="custom-preset-trigger" type="button"
+                    class="w-full bg-surface border border-line hover:border-fg rounded-md px-2.5 py-2 text-left text-xs
+                           flex items-center justify-between transition-colors focus:outline-none">
+              <div class="flex items-center gap-2 truncate">
+                <svg class="w-3.5 h-3.5 text-muted shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/>
+                </svg>
+                <span id="selected-preset-text" class="truncate text-fg font-medium">
+                  Выберите пресет...
+                </span>
+              </div>
+              <svg id="preset-chevron" class="w-3.5 h-3.5 text-dim shrink-0 ml-1 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="m6 9 6 6 6-6"/>
+              </svg>
+            </button>
+
+            <!-- Custom Preset Dropdown Menu -->
+            <div id="custom-preset-menu"
+                 class="hidden absolute left-0 top-full mt-1.5 w-full bg-surface border border-line rounded-lg shadow-2xl z-50 overflow-hidden max-h-60 flex flex-col">
+              <!-- Search inside presets (shown if > 3 presets) -->
+              <div id="preset-search-container" class="p-2 border-b border-line bg-bg/95 hidden">
+                <input id="preset-search-box" type="text"
+                       placeholder="Поиск пресета..."
+                       class="w-full bg-surface border border-line rounded px-2 py-1 text-xs text-fg placeholder:text-dim focus:outline-none focus:border-fg">
+              </div>
+
+              <!-- List of Presets -->
+              <div id="custom-preset-list" class="p-1.5 space-y-1 overflow-y-auto max-h-48 text-xs">
+                <!-- Dynamically rendered items -->
+              </div>
+            </div>
+
+            <!-- Apply Preset Button -->
+            <button id="apply-preset-btn" type="button"
+                    class="w-full px-3 py-2 text-xs bg-line hover:bg-dim text-fg rounded font-medium transition-colors flex items-center justify-center gap-1.5"
+                    data-i18n="apply_btn">
+              <svg class="w-3.5 h-3.5 text-dim" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              <span>Загрузить пресет</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Main Actions -->
+        <div class="space-y-2">
+          <button id="save-btn"
+                  class="w-full px-3 py-2 text-[13px] bg-fg text-bg rounded-md font-medium
+                         hover:opacity-90 transition-opacity tracking-[-0.005em]
+                         disabled:opacity-30 disabled:cursor-not-allowed" data-i18n="save_changes">
+            Сохранить изменения
+          </button>
+          <button id="rollback-btn"
+                  class="w-full px-3 py-2 text-[13px] border border-line rounded-md
+                         hover:bg-surface transition-colors tracking-[-0.005em] flex items-center justify-center gap-1.5">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+              <path d="M3 3v5h5"/>
+            </svg>
+            <span data-i18n="rollback">Шаг назад (Rollback)</span>
+          </button>
+          <button id="save-preset-btn"
+                  class="w-full px-3 py-2 text-[13px] border border-line rounded-md
+                         hover:bg-surface transition-colors tracking-[-0.005em]" data-i18n="save_as_preset">
+            Сохранить как пресет...
+          </button>
+          <button id="reset-state-btn"
+                  class="w-full px-3 py-2 text-[13px] border border-line rounded-md text-muted
+                         hover:bg-surface hover:text-fg transition-colors tracking-[-0.005em]" data-i18n="reset_state">
+            Сбросить шаг (None)
+          </button>
+          <button id="clear-all-btn"
+                  class="w-full px-3 py-2 text-[13px] border border-line rounded-md text-danger
+                         hover:bg-danger/10 hover:border-danger transition-colors tracking-[-0.005em]" data-i18n="clear_all">
+            Очистить память сессии
+          </button>
+        </div>
+      </aside>
+
+      <!-- ─── RIGHT: STATE + DATA ─── -->
+      <section class="space-y-6 min-w-0">
+
+        <!-- ─── CUSTOM STATE JUMPER (Searchable & Grouped Dropdown) ─── -->
+        <div class="border border-line rounded-lg p-4 bg-surface/30 space-y-3">
+          <div class="flex items-center justify-between">
+            <label class="text-[11px] uppercase tracking-[0.08em] font-medium text-muted" data-i18n="state_jumper_title">
+              FSM Шаг (State Jumper)
+            </label>
+            <span class="text-[10px] text-dim" data-i18n="state_jumper_desc">
+              интроспекция StatesGroup в реальном времени
+            </span>
+          </div>
+
+          <!-- Selected State Bar with Dropdown Toggle and Instant Switch Button -->
+          <div class="relative">
+            <div class="flex gap-2 items-center">
+              <!-- Custom State Trigger Button -->
+              <button id="custom-state-trigger" type="button"
+                      class="flex-1 bg-bg border border-line hover:border-fg rounded-md px-3 py-2.5 text-left text-[13px]
+                             flex items-center justify-between transition-colors focus:outline-none">
+                <div class="flex items-center gap-2 truncate">
+                  <span id="current-state-dot" class="dot dot-outline"></span>
+                  <span id="current-state-text" class="data font-medium truncate text-fg">
+                    — без состояния (idle)
+                  </span>
+                </div>
+                <svg class="w-4 h-4 text-dim shrink-0 ml-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="m6 9 6 6 6-6"/>
+                </svg>
+              </button>
+
+              <!-- Apply Switch Button -->
+              <button id="apply-state-btn" type="button"
+                      class="px-4 py-2.5 text-[13px] bg-fg text-bg rounded-md font-medium hover:opacity-90 transition-opacity tracking-[-0.005em] shrink-0"
+                      data-i18n="switch_state_btn">
+                Переключить
+              </button>
+            </div>
+
+            <!-- Custom Dropdown Menu -->
+            <div id="custom-state-menu"
+                 class="hidden absolute left-0 top-full mt-1.5 w-full bg-surface border border-line rounded-lg shadow-2xl z-50 overflow-hidden max-h-80 flex flex-col">
+              <!-- Search inside states -->
+              <div class="p-2 border-b border-line bg-bg/80">
+                <input id="state-search-box" type="text"
+                       placeholder="Поиск шага по названию…"
+                       class="w-full bg-surface border border-line rounded px-2.5 py-1.5 text-xs text-fg placeholder:text-dim focus:outline-none focus:border-fg">
+              </div>
+
+              <!-- List of States -->
+              <div id="custom-states-list" class="overflow-y-auto p-1.5 space-y-1 divide-y divide-line/30 text-xs">
+                <!-- Dynamically generated groups and states -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ─── DATA EDITOR ─── -->
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <div class="flex items-center gap-2">
+              <label class="text-[10px] uppercase tracking-[0.08em] text-muted" data-i18n="fsm_data_title">Данные FSM (JSON)</label>
+              <span id="dirty-badge" class="text-[10px] text-warning hidden" data-i18n="unsaved_badge">● есть несохраненные правки</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span id="readonly-badge" class="hidden text-[10px] text-dim bg-line/50 px-1.5 py-0.5 rounded" data-i18n="objects_protected">
+                Сложные Python-объекты защищены от стирания
+              </span>
+            </div>
+          </div>
+          <textarea id="data-editor" spellcheck="false" rows="15"
+                    class="json-editor w-full bg-transparent border border-line rounded-md p-3
+                           text-[13px] text-fg
+                           focus:outline-none focus:border-fg transition-colors"></textarea>
+
+          <div class="flex items-center justify-between mt-2 text-xs text-muted">
+            <div class="flex items-center gap-3">
+              <span id="json-status" class="data">
+                <span class="text-success">✓</span> <span data-i18n="valid_json">Корректный JSON</span>
+              </span>
+              <span class="text-dim">·</span>
+              <span id="json-keys" class="tabular">0 ключей</span>
+              <span class="text-dim">·</span>
+              <span id="json-bytes" class="tabular">0 B</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <button id="cancel-btn"
+                      class="px-2.5 py-1 text-[11px] border border-line rounded-md text-muted
+                             hover:bg-surface hover:text-fg transition-colors" data-i18n="cancel_btn">
+                Отменить
+              </button>
+              <span class="text-dim text-[10px]">⌘S</span>
+            </div>
+          </div>
+
+          <!-- Human-Friendly JSON Error Decryption Banner -->
+          <div id="json-error-banner" class="hidden mt-2.5 p-3 rounded-lg border border-red-500/35 bg-red-500/10 text-xs space-y-1.5 shadow-sm">
+            <div class="flex items-start justify-between gap-2">
+              <div class="flex items-center gap-2 font-semibold text-red-400">
+                <span class="w-4 h-4 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center font-bold text-[10px]">✕</span>
+                <span id="json-error-title">—</span>
+              </div>
+              <span id="json-error-pos" class="data text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 shrink-0 font-medium tabular"></span>
+            </div>
+            <p id="json-error-desc" class="text-red-300/90 text-[11px] leading-relaxed"></p>
+            <div id="json-error-snippet" class="p-2 rounded bg-black/50 font-mono text-[11px] text-red-200 overflow-x-auto whitespace-pre"></div>
+            <div class="flex items-center gap-1.5 text-[11px] text-amber-300/95 pt-0.5 font-medium">
+              <span>💡</span>
+              <span id="json-error-tip">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ─── AUDIT LOG ─── -->
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-[10px] uppercase tracking-[0.08em] text-muted" data-i18n="activity_log_title">История переходов и лог апдейтов</h3>
+            <span class="text-[10px] text-dim" data-i18n="activity_log_sub">тайм-тревел и хроника событий</span>
+          </div>
+          <ul id="audit-list" class="border border-line rounded-lg divide-y divide-line/70 text-xs max-h-60 overflow-y-auto"></ul>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- ═══════════════ PRESETS MODAL ═══════════════ -->
+  <div id="presets-modal" class="fixed inset-0 bg-black/75 z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-surface border border-line rounded-lg w-full max-w-lg p-5 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-line pb-3">
+        <h3 class="font-semibold text-sm" data-i18n="presets_modal_title">Пресеты состояний и закладки</h3>
+        <button onclick="closePresetsModal()" class="text-muted hover:text-fg text-sm">✕</button>
+      </div>
+      <div id="presets-list" class="space-y-2 max-h-64 overflow-y-auto divide-y divide-line/40">
+        <div class="text-dim text-xs italic py-2" data-i18n="no_presets">Нет сохраненных пресетов.</div>
+      </div>
+      <div class="border-t border-line pt-3 flex justify-end">
+        <button onclick="closePresetsModal()" class="px-3 py-1.5 text-xs border border-line rounded hover:bg-surface" data-i18n="close_btn">
+          Закрыть
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ CONFIRM / PROMPT CUSTOM MODAL ═══════════════ -->
+  <div id="custom-dialog-modal" class="fixed inset-0 bg-black/80 z-[100] hidden flex items-center justify-center p-4">
+    <div class="bg-surface border border-line rounded-lg w-full max-w-md p-5 space-y-4 shadow-2xl">
+      <div class="border-b border-line pb-2.5">
+        <h4 id="dialog-title" class="font-semibold text-sm text-fg">Подтверждение</h4>
+      </div>
+      <p id="dialog-message" class="text-xs text-muted leading-relaxed"></p>
+      <div id="dialog-input-wrapper" class="hidden">
+        <input id="dialog-input" type="text"
+               class="w-full bg-bg border border-line rounded px-3 py-2 text-xs text-fg focus:outline-none focus:border-fg">
+      </div>
+      <div class="flex justify-end gap-2 pt-2 border-t border-line">
+        <button id="dialog-cancel-btn" class="px-3 py-1.5 text-xs border border-line rounded hover:bg-bg text-muted hover:text-fg transition-colors">
+          Отмена
+        </button>
+        <button id="dialog-confirm-btn" class="px-3 py-1.5 text-xs bg-fg text-bg rounded font-medium hover:opacity-90 transition-opacity">
+          Подтвердить
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ TOAST NOTIFICATIONS CONTAINER ═══════════════ -->
+  <div id="toast-container" class="fixed bottom-5 right-5 z-[110] flex flex-col gap-2 max-w-sm pointer-events-none"></div>
+
+  <!-- ═══════════════ SCRIPT ═══════════════ -->
+  <script>
+    // ─── i18n Translations Dictionary ───
+    const I18N = {
+      ru: {
+        live_online: 'Онлайн',
+        live_reconnecting: 'Подключение...',
+        sessions_in_memory: 'сессий в памяти',
+        presets: 'Пресеты',
+        sessions_title: 'Активные сессии',
+        col_user: 'Пользователь',
+        col_bot: 'Бот',
+        all_bots: 'Все боты',
+        all_bots_desc: 'Сводный дашборд всех сессий',
+        select_bot_title: 'Выбор бота (Select Bot)',
+        add_bot_btn: '+ Подключить порт / URL',
+        connected_label: 'Подключен',
+        offline_label: 'Оффлайн',
+        col_state: 'FSM Состояние',
+        col_data: 'Данные',
+        col_updated: 'Активность',
+        waiting_sessions: 'Ожидание входящих сессий...',
+        no_sessions: 'Сессий пока нет. Отправьте /start боту в Telegram!',
+        showing_prefix: 'Отображается: ',
+        ws_enabled: 'WebSocket синхронизация активна',
+        manual_refresh: 'Обновить список',
+        breadcrumb_sessions: 'Сессии',
+        session_context: 'Контекст сессии',
+        updated_label: 'Обновлено',
+        apply_preset_title: 'Применить пресет',
+        choose_preset: 'Выберите пресет...',
+        apply_btn: 'Загрузить',
+        save_changes: 'Сохранить изменения',
+        rollback: 'Шаг назад (Rollback)',
+        save_as_preset: 'Сохранить как пресет...',
+        reset_state: 'Сбросить шаг (None)',
+        clear_all: 'Очистить память сессии',
+        state_jumper_title: 'FSM Шаг (State Jumper)',
+        state_jumper_desc: 'интроспекция StatesGroup в реальном времени',
+        switch_state_btn: 'Переключить',
+        idle_state: '— без состояния (idle)',
+        fsm_data_title: 'Данные FSM (JSON)',
+        unsaved_badge: '● есть несохраненные правки',
+        objects_protected: 'Сложные Python-объекты защищены от стирания',
+        valid_json: 'Корректный JSON',
+        invalid_json: 'Ошибка синтаксиса JSON',
+        cancel_btn: 'Отменить',
+        activity_log_title: 'История переходов и лог апдейтов',
+        activity_log_sub: 'тайм-тревел и хроника событий',
+        no_activity: 'История активности пуста.',
+        presets_modal_title: 'Пресеты состояний и закладки',
+        no_presets: 'Нет сохраненных пресетов.',
+        close_btn: 'Закрыть',
+        delete_btn: 'Удалить',
+        search_states_placeholder: 'Поиск шага по названию…',
+        search_presets_placeholder: 'Поиск пресета по названию…',
+        search_sessions_placeholder: 'Поиск по user_id, @username, шагу FSM…',
+        toast_saved: 'Изменения успешно сохранены ✓',
+        toast_state_switched: 'Шаг FSM переключен на: ',
+        toast_state_reset: 'Шаг FSM сброшен в None',
+        toast_cleared: 'Память сессии полностью очищена',
+        toast_rollback_ok: 'Откат выполнен успешно! Возвращен предыдущий шаг',
+        toast_rollback_fail: 'Нет предыдущих снимков для отката',
+        toast_preset_saved: 'Пресет успешно сохранен!',
+        toast_preset_applied: 'Пресет успешно применен к сессии!',
+        confirm_reset_state: 'Сбросить FSM состояние в None? Пользователь вернется в исходную точку сценария.',
+        confirm_clear_all: 'Очистить ВСЕ состояние и данные этой сессии? Это действие сотрет память пользователя в боте.',
+        prompt_preset_name: 'Введите понятное название для пресета:',
+        preset_default_name: 'Тестовый сценарий',
+      },
+      en: {
+        live_online: 'Live',
+        live_reconnecting: 'Reconnecting...',
+        sessions_in_memory: 'sessions in memory',
+        presets: 'Presets',
+        sessions_title: 'Active Sessions',
+        col_user: 'User',
+        col_bot: 'Bot',
+        all_bots: 'All Bots',
+        all_bots_desc: 'Unified multi-bot dashboard',
+        select_bot_title: 'Select Bot',
+        add_bot_btn: '+ Connect port / URL',
+        connected_label: 'Connected',
+        offline_label: 'Offline',
+        col_state: 'FSM State',
+        col_data: 'Data',
+        col_updated: 'Last Active',
+        waiting_sessions: 'Waiting for incoming sessions...',
+        no_sessions: 'No sessions yet. Send /start to your bot in Telegram!',
+        showing_prefix: 'Showing: ',
+        ws_enabled: 'WebSocket real-time sync active',
+        manual_refresh: 'Refresh list',
+        breadcrumb_sessions: 'Sessions',
+        session_context: 'Session Context',
+        updated_label: 'Updated',
+        apply_preset_title: 'Apply Preset',
+        choose_preset: 'Choose preset...',
+        apply_btn: 'Apply',
+        save_changes: 'Save changes',
+        rollback: 'Rollback (Time-Travel)',
+        save_as_preset: 'Save as Preset...',
+        reset_state: 'Reset State (None)',
+        clear_all: 'Clear State & Data',
+        state_jumper_title: 'FSM State (State Jumper)',
+        state_jumper_desc: 'real-time StatesGroup reflection',
+        switch_state_btn: 'Switch Step',
+        idle_state: '— idle (no state)',
+        fsm_data_title: 'FSM Data (JSON)',
+        unsaved_badge: '● unsaved changes',
+        objects_protected: 'Complex Python objects protected from erasure',
+        valid_json: 'Valid JSON',
+        invalid_json: 'JSON syntax error',
+        cancel_btn: 'Cancel',
+        activity_log_title: 'Recent Activity & Transitions',
+        activity_log_sub: 'time-travel snapshots & handler logs',
+        no_activity: 'No activity recorded yet.',
+        presets_modal_title: 'State Presets & Bookmarks',
+        no_presets: 'No saved presets yet.',
+        close_btn: 'Close',
+        delete_btn: 'Delete',
+        search_states_placeholder: 'Filter state by name…',
+        search_presets_placeholder: 'Filter presets by name…',
+        search_sessions_placeholder: 'Search user_id, @username, FSM state…',
+        toast_saved: 'Changes successfully saved ✓',
+        toast_state_switched: 'FSM state switched to: ',
+        toast_state_reset: 'FSM state reset to None',
+        toast_cleared: 'Session memory completely wiped',
+        toast_rollback_ok: 'Rollback successful! Previous state restored',
+        toast_rollback_fail: 'No previous snapshots available to roll back to',
+        toast_preset_saved: 'Preset saved successfully!',
+        toast_preset_applied: 'Preset applied to session!',
+        confirm_reset_state: 'Reset FSM state to None? User will return to initial entry point.',
+        confirm_clear_all: 'Clear ALL state and data for this session? This wipes memory in bot.',
+        prompt_preset_name: 'Enter a descriptive name for this preset:',
+        preset_default_name: 'Test Scenario',
+      }
+    };
+
+    let currentLang = localStorage.getItem('inspector_lang') || 'ru';
+
+    function t(key) {
+      const dict = I18N[currentLang] || I18N.ru;
+      return dict[key] !== undefined ? dict[key] : (I18N.ru[key] || key);
+    }
+
+    function pluralizeRu(n, forms) {
+      const abs = Math.abs(n) % 100;
+      const rem = abs % 10;
+      if (abs > 10 && abs < 20) return forms[2];
+      if (rem > 1 && rem < 5) return forms[1];
+      if (rem === 1) return forms[0];
+      return forms[2];
+    }
+
+    function formatSessionsLabel(count) {
+      if (currentLang === 'ru') {
+        const word = pluralizeRu(count, ['сессия', 'сессии', 'сессий']);
+        return `${word} в памяти`;
+      } else {
+        return count === 1 ? 'session in memory' : 'sessions in memory';
+      }
+    }
+
+    function formatKeysLabel(count) {
+      if (currentLang === 'ru') {
+        return `${count} ${pluralizeRu(count, ['ключ', 'ключа', 'ключей'])}`;
+      } else {
+        return `${count} ${count === 1 ? 'key' : 'keys'}`;
+      }
+    }
+
+    function applyTranslations() {
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        el.textContent = t(key);
+      });
+      const searchInp = document.getElementById('search-input');
+      if (searchInp) searchInp.placeholder = t('search_sessions_placeholder');
+      const stateSearch = document.getElementById('state-search-box');
+      if (stateSearch) stateSearch.placeholder = t('search_states_placeholder');
+      const presetSearch = document.getElementById('preset-search-box');
+      if (presetSearch) presetSearch.placeholder = t('search_presets_placeholder');
+      const counterLbl = document.getElementById('sessions-counter-label');
+      if (counterLbl) counterLbl.textContent = formatSessionsLabel(sessions.length);
+      const langLbl = document.getElementById('lang-label');
+      if (langLbl) langLbl.textContent = currentLang === 'ru' ? 'EN' : 'RU';
+      updateLiveBadgeStatus(window.wsClient ? window.wsClient.isConnected : false);
+      updatePresetTriggerUI();
+    }
+
+    function toggleLanguage() {
+      currentLang = currentLang === 'ru' ? 'en' : 'ru';
+      localStorage.setItem('inspector_lang', currentLang);
+      applyTranslations();
+      renderRows();
+      updateJsonStatus();
+      renderCustomPresetDropdown();
+      if (currentSession) {
+        updateStateTriggerUI(selectedStateCandidate !== null ? selectedStateCandidate : (currentSession.fsm?.current_state || null));
+        updatePresetTriggerUI();
+      }
+    }
+
+    // ─── Custom Toast Notifications ───
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toast-container');
+      if (!container) return;
+      const toast = document.createElement('div');
+      const colors = {
+        success: 'border-emerald-500/40 bg-surface/95 text-emerald-400',
+        error:   'border-red-500/40 bg-surface/95 text-red-400',
+        warning: 'border-amber-500/40 bg-surface/95 text-amber-400',
+        info:    'border-line bg-surface/95 text-fg',
+      };
+      const icons = {
+        success: '✓',
+        error:   '✕',
+        warning: '⚠',
+        info:    'ℹ',
+      };
+
+      toast.className = `pointer-events-auto flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg border shadow-xl text-xs font-medium backdrop-blur transition-all duration-300 transform translate-y-3 opacity-0 ${colors[type] || colors.info}`;
+      toast.innerHTML = `
+        <span class="font-bold text-sm shrink-0">${icons[type] || '•'}</span>
+        <span class="flex-1 text-fg">${escapeHtml(message)}</span>
+      `;
+      container.appendChild(toast);
+
+      requestAnimationFrame(() => {
+        toast.classList.remove('translate-y-3', 'opacity-0');
+      });
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 3200);
+    }
+
+    // ─── Custom Modal Dialogs (No alert, prompt, confirm) ───
+    let dialogResolve = null;
+
+    function showConfirmModal(title, message) {
+      return new Promise((resolve) => {
+        dialogResolve = resolve;
+        document.getElementById('dialog-title').textContent = title;
+        document.getElementById('dialog-message').textContent = message;
+        document.getElementById('dialog-input-wrapper').classList.add('hidden');
+        document.getElementById('custom-dialog-modal').classList.remove('hidden');
+      });
+    }
+
+    function showPromptModal(title, message, defaultVal = '') {
+      return new Promise((resolve) => {
+        dialogResolve = resolve;
+        document.getElementById('dialog-title').textContent = title;
+        document.getElementById('dialog-message').textContent = message;
+        const inputWrap = document.getElementById('dialog-input-wrapper');
+        const input = document.getElementById('dialog-input');
+        inputWrap.classList.remove('hidden');
+        input.value = defaultVal;
+        document.getElementById('custom-dialog-modal').classList.remove('hidden');
+        setTimeout(() => { input.focus(); input.select(); }, 50);
+      });
+    }
+
+    function closeDialog(result) {
+      document.getElementById('custom-dialog-modal').classList.add('hidden');
+      if (dialogResolve) {
+        dialogResolve(result);
+        dialogResolve = null;
+      }
+    }
+
+    // ─── State Store & Multi-Bot Architecture ───
+    const currentOriginPort = window.location.port ? parseInt(window.location.port, 10) : 8080;
+    let knownBots = [
+      {
+        id: `port_${currentOriginPort}`,
+        port: currentOriginPort,
+        baseUrl: `${window.location.protocol}//${window.location.host}`,
+        wsUrl: `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/v1/ws`,
+        username: 'Текущий бот',
+        name: 'Local Bot',
+        online: true,
+        isCurrent: true,
+        sessions: [],
+        statesTree: {},
+        snapshots: [],
+        wsClient: null,
+      }
+    ];
+    let activeBotFilter = 'all'; // 'all' or bot.id
+
+    let sessions = [];
+    let statesTree = {};
+    let presets = [];
+    let currentSession = null;
+    let selectedStateCandidate = null;
+    let baselineState = '';
+    let baselineData = '';
+
+    const $ = (sel) => document.querySelector(sel);
+    const escapeHtml = (s) => String(s || '').replace(/[&<>"']/g, c =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+    function getSessionQuery(key) {
+      if (!key) return '';
+      const params = new URLSearchParams();
+      if (key.bot_id != null) params.set('bot_id', key.bot_id);
+      if (key.thread_id != null) params.set('thread_id', key.thread_id);
+      if (key.destiny) params.set('destiny', key.destiny);
+      if (key.business_connection_id) params.set('business_connection_id', key.business_connection_id);
+      const q = params.toString();
+      return q ? '?' + q : '';
+    }
+
+    function formatBytes(n) {
+      if (n < 1024) return n + ' B';
+      if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+      return (n / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+
+    function timeAgo(timestamp) {
+      if (!timestamp) return '—';
+      const sec = Math.floor(Date.now() / 1000 - timestamp);
+      if (sec < 3) return currentLang === 'ru' ? 'только что' : 'just now';
+      if (sec < 60) return `${sec}s`;
+      if (sec < 3600) return `${Math.floor(sec / 60)}m`;
+      return `${Math.floor(sec / 3600)}h`;
+    }
+
+    function updateLiveBadgeStatus(isConnected) {
+      const badge = document.getElementById('ws-badge');
+      const indicator = document.getElementById('ws-indicator');
+      const text = document.getElementById('ws-status-text');
+      if (!badge || !indicator || !text) return;
+
+      if (isConnected) {
+        badge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 transition-colors';
+        indicator.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse-dot';
+        text.textContent = t('live_online');
+      } else {
+        badge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/25 transition-colors';
+        indicator.className = 'w-2 h-2 rounded-full bg-amber-400';
+        text.textContent = t('live_reconnecting');
+      }
+    }
+
+    // ─── REST API Fetchers ───
+    async function apiFetch(path, options = {}) {
+      try {
+        let fullUrl = path;
+        if (!path.startsWith('http://') && !path.startsWith('https://')) {
+          const baseUrl = options.baseUrl || (currentSession && currentSession._botBaseUrl) || '';
+          fullUrl = baseUrl + path;
+        }
+        const res = await fetch(fullUrl, {
+          headers: { 'Content-Type': 'application/json', ...options.headers },
+          ...options,
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.json();
+      } catch (err) {
+        console.error(`API Error on ${path}:`, err);
+        return null;
+      }
+    }
+
+    async function loadSessions() {
+      const data = await apiFetch('/api/v1/sessions');
+      if (data) {
+        sessions = data;
+        renderRows();
+      }
+    }
+
+    async function loadStatesTree() {
+      const tree = await apiFetch('/api/v1/states-tree');
+      if (tree) {
+        statesTree = tree;
+        renderCustomStatesDropdown();
+      }
+    }
+
+    async function loadPresets() {
+      const p = await apiFetch('/api/v1/snapshots');
+      if (p) {
+        presets = p;
+        const badge = document.getElementById('presets-count-badge');
+        if (badge) badge.textContent = presets.length;
+        const badgeInline = document.getElementById('presets-count-badge-inline');
+        if (badgeInline) badgeInline.textContent = presets.length;
+        if (selectedPresetCandidate) {
+          selectedPresetCandidate = presets.find(x => x.id === selectedPresetCandidate.id) || null;
+          updatePresetTriggerUI();
+        }
+        renderCustomPresetDropdown();
+      }
+    }
+
+    // ─── Custom State Jumper Dropdown ───
+    function renderCustomStatesDropdown(filterText = '') {
+      const listEl = document.getElementById('custom-states-list');
+      if (!listEl) return;
+      listEl.innerHTML = '';
+      const filter = filterText.toLowerCase();
+
+      // "None / Idle" option
+      const noneItem = document.createElement('div');
+      noneItem.className = 'px-3 py-2 rounded hover:bg-bg cursor-pointer flex items-center justify-between text-dim hover:text-fg transition-colors';
+      noneItem.innerHTML = `
+        <div class="flex items-center gap-2">
+          <span class="dot dot-outline"></span>
+          <span class="italic font-medium">${t('idle_state')}</span>
+        </div>
+        ${selectedStateCandidate === null ? '<span class="text-emerald-400 text-xs font-bold">✓</span>' : ''}
+      `;
+      noneItem.onclick = () => selectCandidateState(null);
+      noneItem.ondblclick = () => { selectCandidateState(null); applyStateSwitch(); };
+      listEl.appendChild(noneItem);
+
+      // Iterate StatesGroups and States
+      for (const [groupName, states] of Object.entries(statesTree)) {
+        const matchingStates = states.filter(s => s.toLowerCase().includes(filter) || groupName.toLowerCase().includes(filter));
+        if (!matchingStates.length && filter) continue;
+
+        const groupHeader = document.createElement('div');
+        groupHeader.className = 'px-2 pt-2.5 pb-1 text-[10px] uppercase font-bold tracking-wider text-muted/70';
+        groupHeader.textContent = groupName;
+        listEl.appendChild(groupHeader);
+
+        for (const st of matchingStates) {
+          const item = document.createElement('div');
+          const isSelected = selectedStateCandidate === st;
+          item.className = `px-3 py-2 rounded cursor-pointer flex items-center justify-between transition-colors ${
+            isSelected ? 'bg-fg text-bg font-medium' : 'hover:bg-bg text-fg'
+          }`;
+
+          const shortName = st.startsWith(groupName + ':') ? st.slice(groupName.length + 1) : st;
+          item.innerHTML = `
+            <div class="flex items-center gap-2 truncate">
+              <span class="dot ${isSelected ? 'dot-filled bg-bg' : 'dot-filled'}"></span>
+              <span class="font-medium">${escapeHtml(shortName)}</span>
+              <span class="text-[10px] opacity-60">(${escapeHtml(groupName)})</span>
+            </div>
+            ${isSelected ? '<span class="text-xs font-bold">✓</span>' : ''}
+          `;
+          item.onclick = () => selectCandidateState(st);
+          item.ondblclick = () => { selectCandidateState(st); applyStateSwitch(); };
+          listEl.appendChild(item);
+        }
+      }
+    }
+
+    function toggleCustomStateMenu(forceClose = false) {
+      const menu = document.getElementById('custom-state-menu');
+      if (!menu) return;
+      if (forceClose || !menu.classList.contains('hidden')) {
+        menu.classList.add('hidden');
+      } else {
+        menu.classList.remove('hidden');
+        const searchBox = document.getElementById('state-search-box');
+        if (searchBox) {
+          searchBox.value = '';
+          renderCustomStatesDropdown();
+          setTimeout(() => searchBox.focus(), 50);
+        }
+      }
+    }
+
+    function selectCandidateState(stateVal) {
+      selectedStateCandidate = stateVal;
+      updateStateTriggerUI(stateVal);
+      toggleCustomStateMenu(true);
+    }
+
+    function updateStateTriggerUI(stateVal) {
+      const textEl = document.getElementById('current-state-text');
+      const dotEl = document.getElementById('current-state-dot');
+      if (!textEl || !dotEl) return;
+      if (stateVal) {
+        textEl.textContent = stateVal;
+        textEl.className = 'data font-medium truncate text-fg';
+        dotEl.className = 'dot dot-filled';
+      } else {
+        textEl.textContent = t('idle_state');
+        textEl.className = 'data font-medium truncate text-dim italic';
+        dotEl.className = 'dot dot-outline';
+      }
+    }
+
+    async function applyStateSwitch() {
+      if (!currentSession) return;
+      const s = currentSession;
+      const targetState = selectedStateCandidate;
+
+      const res = await apiFetch(`/api/v1/sessions/${s.key.chat_id}/${s.key.user_id}/state${getSessionQuery(s.key)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ state: targetState }),
+      });
+
+      if (res && res.status === 'ok') {
+        s.fsm.current_state = targetState;
+        baselineState = targetState || '';
+        updateStateTriggerUI(targetState);
+        showToast(
+          targetState ? `${t('toast_state_switched')}${targetState}` : t('toast_state_reset'),
+          'success'
+        );
+      }
+    }
+
+    // ─── Custom Presets Dropdown ───
+    let selectedPresetCandidate = null;
+
+    function renderCustomPresetDropdown(filterText = '') {
+      const listEl = document.getElementById('custom-preset-list');
+      const searchContainer = document.getElementById('preset-search-container');
+      const badgeInline = document.getElementById('presets-count-badge-inline');
+      if (badgeInline) badgeInline.textContent = presets.length;
+
+      if (!listEl) return;
+      listEl.innerHTML = '';
+
+      if (searchContainer) {
+        if (presets.length > 3) {
+          searchContainer.classList.remove('hidden');
+        } else {
+          searchContainer.classList.add('hidden');
+        }
+      }
+
+      if (!presets.length) {
+        const empty = document.createElement('div');
+        empty.className = 'px-3 py-4 text-center text-dim italic text-xs';
+        empty.textContent = t('no_presets');
+        listEl.appendChild(empty);
+        return;
+      }
+
+      const filter = filterText.trim().toLowerCase();
+      const matchingPresets = presets.filter(p => {
+        if (!filter) return true;
+        const n = (p.name || '').toLowerCase();
+        const st = (p.state || '').toLowerCase();
+        const d = (p.description || '').toLowerCase();
+        return n.includes(filter) || st.includes(filter) || d.includes(filter);
+      });
+
+      if (!matchingPresets.length) {
+        const noMatch = document.createElement('div');
+        noMatch.className = 'px-3 py-3 text-center text-dim italic text-xs';
+        noMatch.textContent = currentLang === 'ru' ? 'Пресеты не найдены' : 'No matching presets';
+        listEl.appendChild(noMatch);
+        return;
+      }
+
+      for (const p of matchingPresets) {
+        const isSelected = selectedPresetCandidate && selectedPresetCandidate.id === p.id;
+        const item = document.createElement('div');
+        item.className = `p-2 rounded cursor-pointer transition-colors ${
+          isSelected ? 'bg-fg text-bg' : 'hover:bg-bg text-fg'
+        }`;
+
+        const keyCount = p.data && typeof p.data === 'object' ? Object.keys(p.data).length : 0;
+        const keyLabel = currentLang === 'ru'
+          ? `${keyCount} ${pluralizeRu(keyCount, ['ключ', 'ключа', 'ключей'])}`
+          : `${keyCount} ${keyCount === 1 ? 'key' : 'keys'}`;
+
+        item.innerHTML = `
+          <div class="flex items-start justify-between gap-1.5">
+            <div class="font-medium truncate flex-1 leading-snug">${escapeHtml(p.name)}</div>
+            ${isSelected ? '<span class="text-xs font-bold shrink-0">✓</span>' : ''}
+          </div>
+          <div class="flex items-center gap-1.5 text-[10px] ${isSelected ? 'opacity-85' : 'text-muted'} mt-1 truncate">
+            <span class="px-1.5 py-0.5 rounded font-mono ${isSelected ? 'bg-bg/25 text-bg' : 'bg-surface border border-line text-dim'} truncate">
+              ${escapeHtml(p.state || 'idle')}
+            </span>
+            <span>•</span>
+            <span class="truncate">${keyLabel}</span>
+          </div>
+          ${p.description ? `<div class="text-[10px] ${isSelected ? 'opacity-75' : 'text-dim'} mt-0.5 truncate">${escapeHtml(p.description)}</div>` : ''}
+        `;
+
+        item.onclick = () => selectCandidatePreset(p);
+        item.ondblclick = () => { selectCandidatePreset(p); applySelectedPreset(); };
+        listEl.appendChild(item);
+      }
+    }
+
+    function toggleCustomPresetMenu(forceClose = false) {
+      const menu = document.getElementById('custom-preset-menu');
+      const chevron = document.getElementById('preset-chevron');
+      if (!menu) return;
+      if (forceClose || !menu.classList.contains('hidden')) {
+        menu.classList.add('hidden');
+        if (chevron) chevron.style.transform = 'rotate(0deg)';
+      } else {
+        menu.classList.remove('hidden');
+        if (chevron) chevron.style.transform = 'rotate(180deg)';
+        const searchBox = document.getElementById('preset-search-box');
+        if (searchBox) {
+          searchBox.value = '';
+          renderCustomPresetDropdown();
+          if (presets.length > 3) {
+            setTimeout(() => searchBox.focus(), 50);
+          }
+        }
+      }
+    }
+
+    function selectCandidatePreset(p) {
+      selectedPresetCandidate = p;
+      updatePresetTriggerUI();
+      toggleCustomPresetMenu(true);
+    }
+
+    function updatePresetTriggerUI() {
+      const textEl = document.getElementById('selected-preset-text');
+      if (!textEl) return;
+      if (selectedPresetCandidate) {
+        textEl.textContent = selectedPresetCandidate.name;
+        textEl.className = 'truncate text-fg font-medium';
+      } else {
+        textEl.textContent = t('choose_preset');
+        textEl.className = 'truncate text-dim font-normal';
+      }
+    }
+
+    // ─── WebSocket Client (Multi-Bot Aware) ───
+    class InspectorWS {
+      constructor(bot) {
+        this.bot = bot;
+        this.socket = null;
+        this.isConnected = false;
+        this.reconnectAttempts = 0;
+        this.connect();
+      }
+
+      connect() {
+        const url = this.bot.wsUrl;
+        try {
+          this.socket = new WebSocket(url);
+        } catch (e) {
+          this.scheduleReconnect();
+          return;
+        }
+
+        this.socket.onopen = () => {
+          this.isConnected = true;
+          this.bot.online = true;
+          this.reconnectAttempts = 0;
+          if (this.bot.isCurrent) updateLiveBadgeStatus(true);
+          renderBotSelectorDropdown();
+          renderRows();
+        };
+
+        this.socket.onmessage = (e) => {
+          try {
+            const msg = JSON.parse(e.data);
+            this.handleMessage(msg.type, msg.payload);
+          } catch (err) {
+            console.error('WS parse error:', err);
+          }
+        };
+
+        this.socket.onclose = () => {
+          this.isConnected = false;
+          this.bot.online = false;
+          if (this.bot.isCurrent) updateLiveBadgeStatus(false);
+          renderBotSelectorDropdown();
+          renderRows();
+          this.scheduleReconnect();
+        };
+
+        this.socket.onerror = () => {
+          if (this.socket) this.socket.close();
+        };
+      }
+
+      scheduleReconnect() {
+        this.reconnectAttempts++;
+        const delay = Math.min(1000 * Math.pow(1.5, this.reconnectAttempts), 8000);
+        setTimeout(() => this.connect(), delay);
+      }
+
+      handleMessage(type, payload) {
+        if (type === 'INIT_SYNC') {
+          if (payload.bot && payload.bot.username) {
+            this.bot.username = `@${payload.bot.username}`;
+            this.bot.id = String(payload.bot.id || this.bot.port);
+          }
+          if (payload.bot && payload.bot.first_name) {
+            this.bot.name = payload.bot.first_name;
+          }
+
+          const botSessions = (payload.sessions || []).map(s => {
+            s._botPort = this.bot.port;
+            s._botBaseUrl = this.bot.baseUrl;
+            s._botUsername = this.bot.username;
+            s._botId = this.bot.id;
+            s._botOnline = true;
+            return s;
+          });
+
+          this.bot.sessions = botSessions;
+          this.bot.statesTree = payload.states_tree || {};
+          this.bot.snapshots = payload.snapshots || [];
+
+          mergeAllSessions();
+
+          if (this.bot.isCurrent) {
+            statesTree = this.bot.statesTree;
+            presets = this.bot.snapshots;
+            renderCustomStatesDropdown();
+            renderCustomPresetDropdown();
+            const badge = document.getElementById('presets-count-badge');
+            if (badge) badge.textContent = presets.length;
+            const badgeInline = document.getElementById('presets-count-badge-inline');
+            if (badgeInline) badgeInline.textContent = presets.length;
+          }
+
+          renderBotSelectorDropdown();
+          renderRows();
+          return;
+        }
+
+        if (type === 'STATE_UPDATED' || type === 'DATA_UPDATED') {
+          const key = payload.key;
+          let s = sessions.find(item =>
+            item.key.chat_id === key.chat_id &&
+            item.key.user_id === key.user_id &&
+            (item._botPort === this.bot.port || String(item.key.bot_id) === String(key.bot_id))
+          );
+
+          if (!s) {
+            s = {
+              key: key,
+              user_meta: null,
+              fsm: { current_state: null, data: {} },
+              history: [],
+              _botPort: this.bot.port,
+              _botBaseUrl: this.bot.baseUrl,
+              _botUsername: this.bot.username,
+              _botId: this.bot.id,
+              _botOnline: true,
+            };
+            sessions.unshift(s);
+          }
+
+          if (type === 'STATE_UPDATED') {
+            s.fsm.current_state = payload.state;
+          } else if (type === 'DATA_UPDATED') {
+            s.fsm.data = payload.data;
+          }
+
+          s.history = s.history || [];
+          s.history.unshift({
+            timestamp: payload.timestamp || (Date.now() / 1000),
+            trigger: payload.source || 'telegram',
+            state: s.fsm.current_state,
+            data: s.fsm.data,
+          });
+
+          renderRows();
+          highlightRow(s.key.user_id);
+
+          if (currentSession && currentSession.key.user_id === s.key.user_id && currentSession._botPort === s._botPort) {
+            refreshCurrentDetail(s, type);
+          }
+        } else if (type === 'HANDLER_EXECUTED' || type === 'HANDLER_ERROR') {
+          if (currentSession && currentSession.key.user_id === payload.user_id && currentSession._botPort === this.bot.port) {
+            const auditEl = document.getElementById('audit-list');
+            if (!auditEl) return;
+            const timeStr = new Date().toTimeString().slice(0, 8);
+            const isErr = type === 'HANDLER_ERROR';
+            const li = document.createElement('li');
+            li.className = `px-4 py-2.5 flex items-baseline gap-4 ${isErr ? 'bg-danger/10 text-danger' : ''}`;
+            li.innerHTML = `
+              <span class="data text-dim tabular text-[11px] shrink-0">${timeStr}</span>
+              <span class="data text-fg text-[12px] flex-1">
+                ${isErr ? `Ошибка: ${escapeHtml(payload.error_type)} - ${escapeHtml(payload.error_message)}` : `Update: ${escapeHtml(payload.event_type)} (${payload.duration_ms}ms)`}
+              </span>
+              <span class="text-[10px] uppercase tracking-[0.08em] ${isErr ? 'text-danger' : 'text-dim'}">${isErr ? 'FAIL' : 'OK'}</span>
+            `;
+            auditEl.prepend(li);
+          }
+        }
+      }
+    }
+
+    function mergeAllSessions() {
+      const merged = [];
+      const seen = new Set();
+      for (const bot of knownBots) {
+        for (const s of (bot.sessions || [])) {
+          const uniqueKey = `${s._botPort}:${s.key.chat_id}:${s.key.user_id}:${s.key.destiny}:${s.key.thread_id || ''}`;
+          if (!seen.has(uniqueKey)) {
+            seen.add(uniqueKey);
+            merged.push(s);
+          }
+        }
+      }
+      sessions = merged;
+    }
+
+    function getVisibleSessions() {
+      if (activeBotFilter === 'all') {
+        return sessions;
+      }
+      return sessions.filter(s =>
+        String(s._botPort) === String(activeBotFilter) ||
+        String(s._botId) === String(activeBotFilter) ||
+        String(s.key.bot_id) === String(activeBotFilter)
+      );
+    }
+
+    // ─── Multi-Bot Discovery & Selector ───
+    async function scanLocalBots() {
+      const promises = [];
+      for (let p = 8080; p <= 8086; p++) {
+        if (p === currentOriginPort) continue;
+        promises.push(probePort(p));
+      }
+      await Promise.allSettled(promises);
+      renderBotSelectorDropdown();
+      renderRows();
+    }
+
+    async function probePort(p) {
+      try {
+        const ctrl = new AbortController();
+        const tid = setTimeout(() => ctrl.abort(), 650);
+        const res = await fetch(`http://127.0.0.1:${p}/api/v1/info`, { signal: ctrl.signal });
+        clearTimeout(tid);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.name === 'aiogram-fsm-inspector') {
+            registerDiscoveredBot(p, data);
+          }
+        }
+      } catch (e) {
+        // Port not reachable, ignore
+      }
+    }
+
+    function registerDiscoveredBot(p, data) {
+      const existing = knownBots.find(b => b.port === p);
+      if (existing) {
+        existing.online = true;
+        if (data.bot?.username) existing.username = `@${data.bot.username}`;
+        if (data.bot?.first_name) existing.name = data.bot.first_name;
+        if (data.bot?.id) existing.id = String(data.bot.id);
+        renderBotSelectorDropdown();
+        return;
+      }
+
+      const botUsername = data.bot?.username ? `@${data.bot.username}` : `Бот :${p}`;
+      const newBot = {
+        id: data.bot?.id ? String(data.bot.id) : `port_${p}`,
+        port: p,
+        baseUrl: `http://127.0.0.1:${p}`,
+        wsUrl: `ws://127.0.0.1:${p}/api/v1/ws`,
+        username: botUsername,
+        name: data.bot?.first_name || '',
+        online: true,
+        isCurrent: false,
+        sessions: [],
+        statesTree: {},
+        snapshots: [],
+        wsClient: null,
+      };
+      knownBots.push(newBot);
+      newBot.wsClient = new InspectorWS(newBot);
+      renderBotSelectorDropdown();
+
+      showToast(
+        currentLang === 'ru'
+          ? `Обнаружен бот ${botUsername} на порту ${p}!`
+          : `Discovered bot ${botUsername} on port ${p}!`,
+        'success'
+      );
+    }
+
+    function renderBotSelectorDropdown() {
+      const listEl = document.getElementById('bot-list-dropdown');
+      const labelEl = document.getElementById('selected-bot-label');
+      const badgeEl = document.getElementById('detected-bots-badge');
+      if (!listEl) return;
+
+      listEl.innerHTML = '';
+      if (badgeEl) badgeEl.textContent = knownBots.length;
+
+      // 1. "All Bots" option
+      const isAll = activeBotFilter === 'all';
+      const allItem = document.createElement('div');
+      allItem.className = `px-2.5 py-2 rounded cursor-pointer transition-colors flex items-center justify-between ${
+        isAll ? 'bg-fg text-bg font-medium' : 'hover:bg-bg text-fg'
+      }`;
+      const totalSessionsCount = sessions.length;
+      allItem.innerHTML = `
+        <div class="flex items-center gap-2 truncate">
+          <span class="w-2 h-2 rounded-full ${isAll ? 'bg-bg' : 'bg-emerald-400'}"></span>
+          <div class="truncate">
+            <div class="font-medium">${t('all_bots')}</div>
+            <div class="text-[10px] ${isAll ? 'opacity-80' : 'text-muted'}">${t('all_bots_desc')}</div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <span class="text-[10px] px-1.5 py-0.5 rounded ${isAll ? 'bg-bg/25 text-bg' : 'bg-line text-muted'}">${totalSessionsCount}</span>
+          ${isAll ? '<span class="text-xs font-bold">✓</span>' : ''}
+        </div>
+      `;
+      allItem.onclick = () => selectBotFilter('all');
+      listEl.appendChild(allItem);
+
+      const div = document.createElement('div');
+      div.className = 'my-1 border-t border-line/60';
+      listEl.appendChild(div);
+
+      // 2. Individual Bots
+      for (const bot of knownBots) {
+        const isSelected = activeBotFilter === bot.id || activeBotFilter === String(bot.port);
+        const botSessionsCount = sessions.filter(s => s._botPort === bot.port || s._botId === bot.id || String(s.key.bot_id) === String(bot.id)).length;
+        const item = document.createElement('div');
+        item.className = `px-2.5 py-2 rounded cursor-pointer transition-colors flex items-center justify-between ${
+          isSelected ? 'bg-fg text-bg font-medium' : 'hover:bg-bg text-fg'
+        }`;
+        item.innerHTML = `
+          <div class="flex items-center gap-2 truncate">
+            <span class="w-2 h-2 rounded-full ${bot.online ? (isSelected ? 'bg-bg' : 'bg-emerald-400') : 'bg-zinc-500'}"></span>
+            <div class="truncate">
+              <div class="font-medium truncate flex items-center gap-1.5">
+                <span>${escapeHtml(bot.username || bot.name || ('Bot :' + bot.port))}</span>
+                <span class="text-[10px] px-1 py-0.2 rounded font-mono ${isSelected ? 'bg-bg/25 text-bg' : 'bg-line/80 text-muted'}">:${bot.port}</span>
+              </div>
+              <div class="text-[10px] ${isSelected ? 'opacity-80' : 'text-muted'}">${bot.online ? t('connected_label') : t('offline_label')}</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <span class="text-[10px] px-1.5 py-0.5 rounded ${isSelected ? 'bg-bg/25 text-bg' : 'bg-line text-muted'}">${botSessionsCount}</span>
+            ${isSelected ? '<span class="text-xs font-bold">✓</span>' : ''}
+          </div>
+        `;
+        item.onclick = () => selectBotFilter(bot.id);
+        listEl.appendChild(item);
+      }
+
+      // Update Header trigger label
+      if (labelEl) {
+        if (activeBotFilter === 'all') {
+          labelEl.textContent = t('all_bots');
+        } else {
+          const activeBot = knownBots.find(b => b.id === activeBotFilter || String(b.port) === String(activeBotFilter));
+          labelEl.textContent = activeBot ? (activeBot.username || `:${activeBot.port}`) : t('all_bots');
+        }
+      }
+    }
+
+    function toggleBotSelectorMenu(forceClose = false) {
+      const menu = document.getElementById('bot-selector-menu');
+      const chevron = document.getElementById('bot-chevron');
+      if (!menu) return;
+      if (forceClose || !menu.classList.contains('hidden')) {
+        menu.classList.add('hidden');
+        if (chevron) chevron.style.transform = 'rotate(0deg)';
+      } else {
+        menu.classList.remove('hidden');
+        if (chevron) chevron.style.transform = 'rotate(180deg)';
+        renderBotSelectorDropdown();
+      }
+    }
+
+    function selectBotFilter(filterVal) {
+      activeBotFilter = filterVal;
+      renderBotSelectorDropdown();
+      toggleBotSelectorMenu(true);
+      renderRows();
+      if (filterVal === 'all') {
+        showToast(currentLang === 'ru' ? 'Режим: Все боты' : 'Mode: All Bots', 'info');
+      } else {
+        const b = knownBots.find(x => x.id === filterVal || String(x.port) === String(filterVal));
+        showToast((currentLang === 'ru' ? 'Выбран бот: ' : 'Selected bot: ') + (b ? b.username : filterVal), 'info');
+      }
+    }
+
+    function highlightRow(userId) {
+      const row = document.querySelector(`#sessions-body tr[data-userid="${userId}"]`);
+      if (row) {
+        row.classList.remove('animate-flash');
+        void row.offsetWidth;
+        row.classList.add('animate-flash');
+      }
+    }
+
+    function refreshCurrentDetail(s, updateType) {
+      currentSession = s;
+      const metaUpd = document.getElementById('meta-updated');
+      if (metaUpd) metaUpd.textContent = timeAgo(Date.now() / 1000);
+
+      const dirtyBadge = document.getElementById('dirty-badge');
+      const dirty = dirtyBadge && !dirtyBadge.classList.contains('hidden');
+      if (!dirty) {
+        selectedStateCandidate = s.fsm.current_state || null;
+        updateStateTriggerUI(selectedStateCandidate);
+
+        const pretty = JSON.stringify(s.fsm.data || {}, null, 2);
+        const dataEditor = document.getElementById('data-editor');
+        if (dataEditor) dataEditor.value = pretty;
+        baselineState = s.fsm.current_state || '';
+        baselineData = pretty;
+        updateJsonStatus();
+      }
+      renderAudit(s.history || []);
+    }
+
+    // ─── List Rendering ───
+    function renderRows() {
+      const visible = getVisibleSessions();
+      const totalCount = document.getElementById('total-count');
+      if (totalCount) totalCount.textContent = sessions.length;
+      const counterLbl = document.getElementById('sessions-counter-label');
+      if (counterLbl) counterLbl.textContent = formatSessionsLabel(sessions.length);
+      const tbody = document.getElementById('sessions-body');
+      if (!tbody) return;
+
+      if (!visible.length) {
+        tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-8 text-center text-dim italic">${t('no_sessions')}</td></tr>`;
+        const showingCount = document.getElementById('showing-count');
+        if (showingCount) showingCount.textContent = '0';
+        return;
+      }
+
+      tbody.innerHTML = visible.map((s, i) => {
+        const keys = Object.keys(s.fsm.data || {}).length;
+        const uid = s.key.user_id;
+        const name = s.user_meta?.full_name || s.user_meta?.username ? `@${s.user_meta?.username || s.user_meta?.full_name}` : '';
+        const st = s.fsm.current_state;
+        const updated = s.history?.[0]?.timestamp ? timeAgo(s.history[0].timestamp) : '—';
+        const botBadge = s._botUsername || (s._botPort ? `:${s._botPort}` : (s.key.bot_id ? `bot_${s.key.bot_id}` : 'Bot'));
+
+        return `
+        <tr class="hover:bg-surface transition-colors cursor-pointer group"
+            data-userid="${uid}" data-idx="${i}" onclick="openSession(${i})">
+          <td class="px-4 py-3">
+            <div class="flex items-center gap-2">
+              <span class="data text-xs font-medium">${uid}</span>
+              ${name ? `<span class="text-xs text-muted font-normal">${escapeHtml(name)}</span>` : ''}
+            </div>
+          </td>
+          <td class="px-4 py-3">
+            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-mono bg-surface border border-line text-fg">
+              <span class="w-1.5 h-1.5 rounded-full ${s._botOnline === false ? 'bg-zinc-500' : 'bg-emerald-400'}"></span>
+              <span class="truncate max-w-[120px]">${escapeHtml(botBadge)}</span>
+            </span>
+          </td>
+          <td class="px-4 py-3">
+            ${st ? `
+              <div class="inline-flex items-center gap-2">
+                <span class="dot dot-filled"></span>
+                <span class="data text-xs font-medium">${escapeHtml(st)}</span>
+              </div>
+            ` : `
+              <div class="inline-flex items-center gap-2">
+                <span class="dot dot-outline"></span>
+                <span class="data text-xs text-dim italic">${t('idle_state')}</span>
+              </div>
+            `}
+          </td>
+          <td class="px-4 py-3">
+            <span class="text-xs text-muted tabular">${formatKeysLabel(keys)}</span>
+          </td>
+          <td class="px-4 py-3">
+            <span class="text-xs text-muted tabular">${updated}</span>
+          </td>
+          <td class="px-4 py-3 text-dim group-hover:text-fg transition-colors">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M5 12h14M12 5l7 7-7 7"/>
+            </svg>
+          </td>
+        </tr>`;
+      }).join('');
+
+      applySearchFilter();
+    }
+
+    function applySearchFilter() {
+      const searchBox = document.getElementById('search-input');
+      const q = searchBox ? searchBox.value.trim().toLowerCase() : '';
+      let visible = 0;
+      document.querySelectorAll('#sessions-body tr[data-userid]').forEach(tr => {
+        const uid = tr.dataset.userid.toLowerCase();
+        const text = tr.textContent.toLowerCase();
+        const match = (q === '' || uid.includes(q) || text.includes(q));
+        tr.style.display = match ? '' : 'none';
+        if (match) visible++;
+      });
+      const showing = document.getElementById('showing-count');
+      if (showing) showing.textContent = visible;
+    }
+
+    // ─── Detail View ───
+    function openSession(idx) {
+      const visible = getVisibleSessions();
+      currentSession = visible[idx];
+      const s = currentSession;
+
+      const bc = document.getElementById('bc-user');
+      if (bc) bc.textContent = `user ${s.key.user_id}` + (s.user_meta?.username ? ` (@${s.user_meta.username})` : '');
+      const metaUser = document.getElementById('meta-user');
+      if (metaUser) metaUser.textContent = s.key.user_id;
+      const metaUname = document.getElementById('meta-username');
+      if (metaUname) metaUname.textContent = s.user_meta?.username ? `@${s.user_meta.username}` : (s.user_meta?.full_name || '—');
+      const metaChat = document.getElementById('meta-chat');
+      if (metaChat) metaChat.textContent = s.key.chat_id;
+      const metaBot = document.getElementById('meta-bot');
+      if (metaBot) {
+        metaBot.textContent = s.key.bot_id + (s._botUsername ? ` (${s._botUsername})` : '') + (s._botPort ? ` [: ${s._botPort}]` : '');
+      }
+      const metaDest = document.getElementById('meta-destiny');
+      if (metaDest) metaDest.textContent = s.key.destiny;
+      const metaUpd = document.getElementById('meta-updated');
+      if (metaUpd) metaUpd.textContent = s.history?.[0]?.timestamp ? timeAgo(s.history[0].timestamp) : '—';
+
+      // Switch context of states and presets to this session's bot if available
+      const ownerBot = knownBots.find(b => b.port === s._botPort || b.id === s._botId || String(b.id) === String(s.key.bot_id));
+      if (ownerBot && ownerBot.statesTree && Object.keys(ownerBot.statesTree).length) {
+        statesTree = ownerBot.statesTree;
+        presets = ownerBot.snapshots || [];
+        renderCustomStatesDropdown();
+        renderCustomPresetDropdown();
+      }
+
+      selectedStateCandidate = s.fsm.current_state || null;
+      updateStateTriggerUI(selectedStateCandidate);
+      selectedPresetCandidate = null;
+      updatePresetTriggerUI();
+      toggleCustomPresetMenu(true);
+
+      const pretty = JSON.stringify(s.fsm.data || {}, null, 2);
+      const dataEditor = document.getElementById('data-editor');
+      if (dataEditor) dataEditor.value = pretty;
+
+      baselineState = s.fsm.current_state || '';
+      baselineData = pretty;
+
+      renderAudit(s.history || []);
+      updateJsonStatus();
+      updateDirty();
+      const saveBtn = document.getElementById('save-btn');
+      if (saveBtn) saveBtn.disabled = true;
+
+      document.getElementById('view-list').classList.add('hidden');
+      document.getElementById('view-session').classList.remove('hidden');
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    }
+
+    function showList() {
+      document.getElementById('view-session').classList.add('hidden');
+      document.getElementById('view-list').classList.remove('hidden');
+      currentSession = null;
+      toggleCustomStateMenu(true);
+      toggleCustomPresetMenu(true);
+      renderRows();
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    }
+
+    function renderAudit(history) {
+      const el = document.getElementById('audit-list');
+      if (!el) return;
+      if (!history || !history.length) {
+        el.innerHTML = `<li class="px-4 py-3 text-dim italic">${t('no_activity')}</li>`;
+        return;
+      }
+      el.innerHTML = history.slice(0, 30).map(h => {
+        const timeStr = h.timestamp ? new Date(h.timestamp * 1000).toTimeString().slice(0, 8) : '—';
+        return `
+        <li class="px-4 py-2.5 flex items-baseline gap-4">
+          <span class="data text-dim tabular text-[11px] shrink-0">${timeStr}</span>
+          <span class="data text-fg text-[12px] flex-1">
+            state: <span class="font-medium">${escapeHtml(h.state || 'None')}</span>
+            <span class="text-dim text-[11px]">(${formatKeysLabel(Object.keys(h.data || {}).length)})</span>
+          </span>
+          <span class="text-[10px] uppercase tracking-[0.08em] text-dim">${escapeHtml(h.trigger || 'system')}</span>
+        </li>`;
+      }).join('');
+    }
+
+    // ─── Human-Friendly JSON Error Decryption ───
+    function explainJsonError(text, err) {
+      const msg = err && err.message ? err.message : String(err || '');
+      let line = 1;
+      let col = 1;
+
+      // 1. Line and column extraction
+      const lineColMatch = msg.match(/line\s+(\d+)\s+column\s+(\d+)/i) || msg.match(/at\s+(\d+):(\d+)/i);
+      if (lineColMatch) {
+        line = parseInt(lineColMatch[1], 10);
+        col = parseInt(lineColMatch[2], 10);
+      } else {
+        const posMatch = msg.match(/position\s+(\d+)/i);
+        if (posMatch) {
+          const pos = parseInt(posMatch[1], 10);
+          const upTo = text.slice(0, pos);
+          const lines = upTo.split('\n');
+          line = lines.length;
+          col = lines[lines.length - 1].length + 1;
+        }
+      }
+
+      // Extract snippet of problematic line
+      const allLines = text.split('\n');
+      const targetLineIdx = Math.max(0, Math.min(line - 1, allLines.length - 1));
+      const snippetLine = allLines[targetLineIdx] || '';
+      const caret = ' '.repeat(Math.max(0, col - 1)) + '^';
+      const snippet = `Строка ${line} | ${snippetLine}\n         ${caret}`;
+
+      const isRu = (currentLang === 'ru');
+      let title = '';
+      let desc = '';
+      let tip = '';
+
+      const lowerMsg = msg.toLowerCase();
+
+      // Case 1: Trailing non-whitespace characters after JSON (User's exact issue!)
+      if (lowerMsg.includes('after json') || lowerMsg.includes('non-whitespace character')) {
+        title = isRu
+          ? 'Лишние символы после закрытия JSON'
+          : 'Extra characters after JSON end';
+        desc = isRu
+          ? `JSON-объект уже успешно закрылся ранее (на строке ${line}), но после него обнаружен лишний текст, символ или дублирующая фигурная скобка }.`
+          : `The JSON object has already closed, but extra characters, trailing text, or redundant closing brackets were found on line ${line}.`;
+        tip = isRu
+          ? 'Удалите лишнюю скобку } или мусорный текст в самом конце файла.'
+          : 'Remove any redundant closing brace } or extra characters after the main object.';
+      }
+      // Case 2: Trailing comma
+      else if (
+        (lowerMsg.includes('unexpected token') && (lowerMsg.includes('}') || lowerMsg.includes(']'))) ||
+        lowerMsg.includes('trailing comma') ||
+        (lowerMsg.includes('expected double-quoted') && snippetLine.trim().endsWith(','))
+      ) {
+        title = isRu
+          ? 'Лишняя запятая перед скобкой'
+          : 'Trailing comma before bracket';
+        desc = isRu
+          ? `На строке ${line} (или строкой выше) стоит запятая перед закрывающей скобкой. В стандарте JSON запятая после последнего элемента строго запрещена.`
+          : `A trailing comma was found at or above line ${line}. JSON strictly forbids commas before closing } or ].`;
+        tip = isRu
+          ? 'Удалите последнюю запятую перед } или ].'
+          : 'Delete the trailing comma before } or ].';
+      }
+      // Case 3: Single quotes or missing quotes on key
+      else if (
+        lowerMsg.includes('expected double-quoted') ||
+        (lowerMsg.includes('valid json') && (snippetLine.includes("'") || snippetLine.match(/[a-zA-Z0-9_]+\s*:/)))
+      ) {
+        title = isRu
+          ? 'Ключи и строки должны быть в двойных кавычках'
+          : 'Keys and strings must use double quotes';
+        desc = isRu
+          ? `В строке ${line} поле или строка указаны в одинарных кавычках '...' или вовсе без кавычек. В JSON допустимы только двойные кавычки "...".`
+          : `Line ${line} uses single quotes or unquoted keys. JSON requires double quotes "...".`;
+        tip = isRu
+          ? 'Замените одинарные кавычки на двойные, например: "название": "значение".'
+          : 'Replace single quotes with double quotes, e.g. "name": "value".';
+      }
+      // Case 4: Missing comma between properties
+      else if (lowerMsg.includes("expected ','") || lowerMsg.includes('after property value')) {
+        title = isRu
+          ? 'Пропущена запятая между полями'
+          : 'Missing comma between fields';
+        desc = isRu
+          ? `Между свойствами объекта пропущена разделяющая запятая на строке ${line}.`
+          : `Properties in an object must be separated by a comma (line ${line}).`;
+        tip = isRu
+          ? 'Поставьте запятую , в конце предыдущей строки.'
+          : 'Add a comma , at the end of the previous line.';
+      }
+      // Case 5: Missing colon after key
+      else if (lowerMsg.includes("expected ':'") || lowerMsg.includes('colon')) {
+        title = isRu
+          ? 'Пропущено двоеточие после ключа'
+          : 'Missing colon after key';
+        desc = isRu
+          ? `После названия ключа на строке ${line} отсутствует двоеточие : перед значением.`
+          : `Missing colon : after property name on line ${line}.`;
+        tip = isRu
+          ? 'Добавьте символ двоеточия : после имени ключа.'
+          : 'Add a colon : after the key name.';
+      }
+      // Case 6: Incomplete JSON / unexpected end
+      else if (lowerMsg.includes('unexpected end') || lowerMsg.includes('end of data')) {
+        title = isRu
+          ? 'JSON не завершен (не закрыты скобки)'
+          : 'Incomplete JSON (unclosed brackets)';
+        desc = isRu
+          ? 'Документ оборвался. Не хватает закрывающей фигурной скобки } или квадратной скобки ].'
+          : 'Document ended abruptly. Missing closing brace } or bracket ].';
+        tip = isRu
+          ? 'Допишите закрывающую скобку } в конце.'
+          : 'Add closing brace } at the end.';
+      }
+      // Case 7: General syntax error
+      else {
+        title = isRu
+          ? `Синтаксическая ошибка (строка ${line}, колонка ${col})`
+          : `Syntax error (line ${line}, col ${col})`;
+        desc = isRu
+          ? `Некорректный символ на строке ${line}, столбце ${col}. Проверьте структуру JSON.`
+          : `Invalid character on line ${line}, column ${col}. Check JSON syntax.`;
+        tip = isRu
+          ? 'Проверьте парные кавычки, двоеточия, запятые и скобки { } [ ].'
+          : 'Check matching quotes, colons, commas and brackets { } [ ].';
+      }
+
+      const posText = isRu
+        ? `Строка ${line}, столбец ${col}`
+        : `Line ${line}, col ${col}`;
+
+      return { line, col, title, desc, tip, snippet, posText };
+    }
+
+    // ─── JSON Status & Dirty Tracking ───
+    function updateJsonStatus() {
+      const dataEditor = document.getElementById('data-editor');
+      const txt = dataEditor ? dataEditor.value : '';
+      const statusEl = document.getElementById('json-status');
+      const bannerEl = document.getElementById('json-error-banner');
+      let parsed, error = null;
+      try { parsed = JSON.parse(txt || '{}'); }
+      catch (e) { error = e; }
+
+      if (error) {
+        const details = explainJsonError(txt, error);
+        if (statusEl) {
+          statusEl.innerHTML = `<span class="text-danger font-semibold">✗</span> <span class="text-danger font-medium">${escapeHtml(details.title)}</span>`;
+        }
+        const keysEl = document.getElementById('json-keys');
+        if (keysEl) keysEl.textContent = '—';
+
+        if (bannerEl) {
+          bannerEl.classList.remove('hidden');
+          const titleEl = document.getElementById('json-error-title');
+          if (titleEl) titleEl.textContent = details.title;
+          const posEl = document.getElementById('json-error-pos');
+          if (posEl) posEl.textContent = details.posText;
+          const descEl = document.getElementById('json-error-desc');
+          if (descEl) descEl.textContent = details.desc;
+          const snipEl = document.getElementById('json-error-snippet');
+          if (snipEl) snipEl.textContent = details.snippet;
+          const tipEl = document.getElementById('json-error-tip');
+          if (tipEl) tipEl.textContent = details.tip;
+        }
+      } else {
+        if (statusEl) {
+          statusEl.innerHTML = `<span class="text-success">✓</span> ${t('valid_json')}`;
+        }
+        if (bannerEl) {
+          bannerEl.classList.add('hidden');
+        }
+        const keys = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+          ? Object.keys(parsed).length : 0;
+        const keysEl = document.getElementById('json-keys');
+        if (keysEl) keysEl.textContent = formatKeysLabel(keys);
+      }
+
+      const bytes = new Blob([txt]).size;
+      const bytesEl = document.getElementById('json-bytes');
+      if (bytesEl) bytesEl.textContent = formatBytes(bytes);
+    }
+
+    function updateDirty() {
+      const dataEditor = document.getElementById('data-editor');
+      const dataNow = dataEditor ? dataEditor.value : '';
+      const dirty = (dataNow !== baselineData);
+
+      let parsedOk = false;
+      try { JSON.parse(dataNow || '{}'); parsedOk = true; } catch {}
+
+      const dirtyBadge = document.getElementById('dirty-badge');
+      if (dirtyBadge) dirtyBadge.classList.toggle('hidden', !dirty);
+      const saveBtn = document.getElementById('save-btn');
+      if (saveBtn) saveBtn.disabled = !dirty || !parsedOk;
+    }
+
+    // ─── Actions: Save Data ───
+    async function saveChanges() {
+      const saveBtn = document.getElementById('save-btn');
+      if (!currentSession || (saveBtn && saveBtn.disabled)) return;
+      const s = currentSession;
+      let parsedData;
+      const dataEditor = document.getElementById('data-editor');
+      try { parsedData = JSON.parse((dataEditor ? dataEditor.value : '') || '{}'); } catch { return; }
+
+      const chatId = s.key.chat_id;
+      const userId = s.key.user_id;
+
+      if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Сохранение...';
+      }
+
+      const res = await apiFetch(`/api/v1/sessions/${chatId}/${userId}/data${getSessionQuery(s.key)}`, {
+        method: 'PUT',
+        body: JSON.stringify(parsedData),
+      });
+
+      if (res && res.status === 'ok') {
+        baselineData = dataEditor ? dataEditor.value : '';
+        updateDirty();
+        showToast(t('toast_saved'), 'success');
+      }
+
+      if (saveBtn) saveBtn.textContent = t('save_changes');
+    }
+
+    // ─── Reset State ───
+    async function resetState() {
+      if (!currentSession) return;
+      const confirmed = await showConfirmModal(t('reset_state'), t('confirm_reset_state'));
+      if (!confirmed) return;
+
+      const s = currentSession;
+      const res = await apiFetch(`/api/v1/sessions/${s.key.chat_id}/${s.key.user_id}/state${getSessionQuery(s.key)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ state: null }),
+      });
+
+      if (res && res.status === 'ok') {
+        s.fsm.current_state = null;
+        baselineState = '';
+        selectedStateCandidate = null;
+        updateStateTriggerUI(null);
+        showToast(t('toast_state_reset'), 'info');
+      }
+    }
+
+    // ─── Clear All ───
+    async function clearAll() {
+      if (!currentSession) return;
+      const confirmed = await showConfirmModal(t('clear_all'), t('confirm_clear_all'));
+      if (!confirmed) return;
+
+      const s = currentSession;
+      const res = await apiFetch(`/api/v1/sessions/${s.key.chat_id}/${s.key.user_id}/clear${getSessionQuery(s.key)}`, {
+        method: 'POST',
+      });
+
+      if (res && res.status === 'ok') {
+        s.fsm.current_state = null;
+        s.fsm.data = {};
+        baselineState = '';
+        baselineData = '{}';
+        selectedStateCandidate = null;
+        updateStateTriggerUI(null);
+        const dataEditor = document.getElementById('data-editor');
+        if (dataEditor) dataEditor.value = '{}';
+        updateJsonStatus();
+        updateDirty();
+        showToast(t('toast_cleared'), 'warning');
+      }
+    }
+
+    // ─── Rollback ───
+    async function rollbackSession() {
+      if (!currentSession) return;
+      const s = currentSession;
+      const res = await apiFetch(`/api/v1/sessions/${s.key.chat_id}/${s.key.user_id}/rollback${getSessionQuery(s.key)}`, {
+        method: 'POST',
+      });
+
+      if (res && res.restored) {
+        s.fsm.current_state = res.restored.state;
+        s.fsm.data = res.restored.data;
+        selectedStateCandidate = res.restored.state || null;
+        updateStateTriggerUI(selectedStateCandidate);
+
+        const pretty = JSON.stringify(res.restored.data || {}, null, 2);
+        const dataEditor = document.getElementById('data-editor');
+        if (dataEditor) dataEditor.value = pretty;
+        baselineState = res.restored.state || '';
+        baselineData = pretty;
+        updateJsonStatus();
+        updateDirty();
+        showToast(t('toast_rollback_ok'), 'success');
+      } else {
+        showToast(t('toast_rollback_fail'), 'warning');
+      }
+    }
+
+    // ─── Presets ───
+    async function saveAsPreset() {
+      if (!currentSession) return;
+      const name = await showPromptModal(t('save_as_preset'), t('prompt_preset_name'), t('preset_default_name'));
+      if (!name) return;
+
+      let data;
+      const dataEditor = document.getElementById('data-editor');
+      try { data = JSON.parse((dataEditor ? dataEditor.value : '') || '{}'); } catch { data = {}; }
+      const state = selectedStateCandidate;
+
+      const created = await apiFetch('/api/v1/snapshots', {
+        method: 'POST',
+        body: JSON.stringify({ name, state, data }),
+      });
+
+      if (created) {
+        showToast(`${t('toast_preset_saved')} («${name}»)`, 'success');
+        await loadPresets();
+      }
+    }
+
+    async function applySelectedPreset() {
+      if (!currentSession) return;
+      if (!selectedPresetCandidate || !selectedPresetCandidate.id) {
+        showToast(t('choose_preset'), 'warning');
+        return;
+      }
+      const presetId = selectedPresetCandidate.id;
+      const s = currentSession;
+      const res = await apiFetch(`/api/v1/snapshots/${presetId}/apply`, {
+        method: 'POST',
+        body: JSON.stringify({
+          chat_id: s.key.chat_id,
+          user_id: s.key.user_id,
+          bot_id: s.key.bot_id,
+          thread_id: s.key.thread_id,
+          destiny: s.key.destiny || 'default'
+        }),
+      });
+
+      if (res && res.preset) {
+        s.fsm.current_state = res.preset.state;
+        s.fsm.data = res.preset.data;
+        selectedStateCandidate = res.preset.state || null;
+        updateStateTriggerUI(selectedStateCandidate);
+
+        const pretty = JSON.stringify(res.preset.data || {}, null, 2);
+        const dataEditor = document.getElementById('data-editor');
+        if (dataEditor) dataEditor.value = pretty;
+        baselineState = res.preset.state || '';
+        baselineData = pretty;
+        updateJsonStatus();
+        updateDirty();
+        showToast(t('toast_preset_applied'), 'success');
+      }
+    }
+
+    function openPresetsModal() {
+      const container = document.getElementById('presets-list');
+      if (!container) return;
+      if (!presets.length) {
+        container.innerHTML = `<div class="text-dim text-xs italic py-2">${t('no_presets')}</div>`;
+      } else {
+        container.innerHTML = presets.map(p => `
+          <div class="py-2.5 flex items-center justify-between text-xs">
+            <div>
+              <div class="font-medium text-fg">${escapeHtml(p.name)}</div>
+              <div class="text-muted text-[11px]">${escapeHtml(p.state || 'idle')} · ${Object.keys(p.data || {}).length} keys</div>
+            </div>
+            <button onclick="deletePreset('${p.id}')" class="text-danger hover:underline text-[11px]">${t('delete_btn')}</button>
+          </div>
+        `).join('');
+      }
+      document.getElementById('presets-modal').classList.remove('hidden');
+    }
+
+    function closePresetsModal() {
+      document.getElementById('presets-modal').classList.add('hidden');
+    }
+
+    async function deletePreset(id) {
+      const confirmed = await showConfirmModal(t('delete_btn'), 'Удалить этот пресет?');
+      if (!confirmed) return;
+      await apiFetch(`/api/v1/snapshots/${id}`, { method: 'DELETE' });
+      if (selectedPresetCandidate && selectedPresetCandidate.id === id) {
+        selectedPresetCandidate = null;
+        updatePresetTriggerUI();
+      }
+      await loadPresets();
+      openPresetsModal();
+      showToast('Пресет удален', 'info');
+    }
+
+    async function refreshAll() {
+      await Promise.all([loadSessions(), loadStatesTree(), loadPresets()]);
+      showToast('Данные обновлены', 'info');
+    }
+
+    // ─── Setup Event Listeners ───
+    window.addEventListener('DOMContentLoaded', () => {
+      // Initialize Language
+      applyTranslations();
+
+      // Connect WebSocket & Auto-Discover Local Bots
+      knownBots[0].wsClient = new InspectorWS(knownBots[0]);
+      scanLocalBots();
+      setInterval(scanLocalBots, 6000);
+
+      // Initial loads
+      Promise.all([loadSessions(), loadStatesTree(), loadPresets()]);
+
+      // Search
+      const searchBox = document.getElementById('search-input');
+      if (searchBox) searchBox.addEventListener('input', applySearchFilter);
+
+      // Bot Selector Trigger
+      const botTrigger = document.getElementById('bot-selector-trigger');
+      if (botTrigger) {
+        botTrigger.addEventListener('click', (e) => {
+          e.stopPropagation();
+          toggleCustomStateMenu(true);
+          toggleCustomPresetMenu(true);
+          toggleBotSelectorMenu();
+        });
+      }
+
+      const rescanBtn = document.getElementById('rescan-bots-btn');
+      if (rescanBtn) {
+        rescanBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          await scanLocalBots();
+          showToast(currentLang === 'ru' ? 'Сканирование портов 8080-8086 завершено' : 'Port scan completed', 'info');
+        });
+      }
+
+      const addBotBtn = document.getElementById('add-bot-port-btn');
+      if (addBotBtn) {
+        addBotBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          toggleBotSelectorMenu(true);
+          const inputVal = await showPromptModal(
+            currentLang === 'ru' ? 'Подключить бота' : 'Connect Bot',
+            currentLang === 'ru'
+              ? 'Введите порт или URL (например 8081 или http://127.0.0.1:8081):'
+              : 'Enter port or URL (e.g. 8081 or http://127.0.0.1:8081):',
+            '8081'
+          );
+          if (!inputVal) return;
+          let targetPort = parseInt(inputVal, 10);
+          if (isNaN(targetPort)) {
+            try {
+              const u = new URL(inputVal);
+              targetPort = u.port ? parseInt(u.port, 10) : (u.protocol === 'https:' ? 443 : 80);
+            } catch (err) {
+              showToast(currentLang === 'ru' ? 'Неверный формат порта или URL' : 'Invalid port or URL format', 'error');
+              return;
+            }
+          }
+          await probePort(targetPort);
+          renderBotSelectorDropdown();
+          renderRows();
+        });
+      }
+
+      // Custom State Jumper triggers
+      const stateTrigger = document.getElementById('custom-state-trigger');
+      if (stateTrigger) {
+        stateTrigger.addEventListener('click', (e) => {
+          e.stopPropagation();
+          toggleBotSelectorMenu(true);
+          toggleCustomPresetMenu(true);
+          toggleCustomStateMenu();
+        });
+      }
+
+      const applyStateBtn = document.getElementById('apply-state-btn');
+      if (applyStateBtn) applyStateBtn.addEventListener('click', applyStateSwitch);
+
+      const stateSearch = document.getElementById('state-search-box');
+      if (stateSearch) {
+        stateSearch.addEventListener('input', (e) => {
+          renderCustomStatesDropdown(e.target.value);
+        });
+      }
+
+      // Custom Preset Selector triggers
+      const presetTrigger = document.getElementById('custom-preset-trigger');
+      if (presetTrigger) {
+        presetTrigger.addEventListener('click', (e) => {
+          e.stopPropagation();
+          toggleBotSelectorMenu(true);
+          toggleCustomStateMenu(true);
+          toggleCustomPresetMenu();
+        });
+      }
+
+      const presetSearch = document.getElementById('preset-search-box');
+      if (presetSearch) {
+        presetSearch.addEventListener('input', (e) => {
+          renderCustomPresetDropdown(e.target.value);
+        });
+      }
+
+      // Close dropdowns when clicking outside
+      document.addEventListener('click', (e) => {
+        if (!e.target.closest('#custom-state-menu') && !e.target.closest('#custom-state-trigger')) {
+          toggleCustomStateMenu(true);
+        }
+        if (!e.target.closest('#custom-preset-menu') && !e.target.closest('#custom-preset-trigger')) {
+          toggleCustomPresetMenu(true);
+        }
+        if (!e.target.closest('#bot-selector-menu') && !e.target.closest('#bot-selector-trigger')) {
+          toggleBotSelectorMenu(true);
+        }
+      });
+
+      // Dialog buttons
+      const dlgCancel = document.getElementById('dialog-cancel-btn');
+      if (dlgCancel) dlgCancel.addEventListener('click', () => closeDialog(null));
+      const dlgConfirm = document.getElementById('dialog-confirm-btn');
+      if (dlgConfirm) {
+        dlgConfirm.addEventListener('click', () => {
+          const inputWrap = document.getElementById('dialog-input-wrapper');
+          const isInput = inputWrap && !inputWrap.classList.contains('hidden');
+          if (isInput) {
+            const inp = document.getElementById('dialog-input');
+            closeDialog(inp ? inp.value.trim() : null);
+          } else {
+            closeDialog(true);
+          }
+        });
+      }
+
+      // Detail events
+      const dataEditor = document.getElementById('data-editor');
+      if (dataEditor) {
+        dataEditor.addEventListener('input', () => {
+          updateJsonStatus();
+          updateDirty();
+        });
+      }
+      const saveBtn = document.getElementById('save-btn');
+      if (saveBtn) saveBtn.addEventListener('click', saveChanges);
+      const resetBtn = document.getElementById('reset-state-btn');
+      if (resetBtn) resetBtn.addEventListener('click', resetState);
+      const clearBtn = document.getElementById('clear-all-btn');
+      if (clearBtn) clearBtn.addEventListener('click', clearAll);
+      const rollbackBtn = document.getElementById('rollback-btn');
+      if (rollbackBtn) rollbackBtn.addEventListener('click', rollbackSession);
+      const savePresetBtn = document.getElementById('save-preset-btn');
+      if (savePresetBtn) savePresetBtn.addEventListener('click', saveAsPreset);
+      const applyPresetBtn = document.getElementById('apply-preset-btn');
+      if (applyPresetBtn) applyPresetBtn.addEventListener('click', applySelectedPreset);
+
+      const cancelBtn = document.getElementById('cancel-btn');
+      if (cancelBtn) {
+        cancelBtn.addEventListener('click', () => {
+          if (dataEditor) dataEditor.value = baselineData;
+          updateJsonStatus();
+          updateDirty();
+        });
+      }
+
+      // Presets modal
+      const presetsBtn = document.getElementById('presets-modal-btn');
+      if (presetsBtn) presetsBtn.addEventListener('click', openPresetsModal);
+
+      // Language toggle
+      const langBtn = document.getElementById('lang-toggle-btn');
+      if (langBtn) langBtn.addEventListener('click', toggleLanguage);
+
+      // Theme toggle
+      const themeBtn = document.getElementById('theme-toggle');
+      if (themeBtn) {
+        themeBtn.addEventListener('click', () => {
+          const isLight = document.documentElement.classList.toggle('light');
+          document.getElementById('icon-moon').classList.toggle('hidden', isLight);
+          document.getElementById('icon-sun').classList.toggle('hidden', !isLight);
+        });
+      }
+
+      // Global hotkeys
+      document.addEventListener('keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+          if (!document.getElementById('view-list').classList.contains('hidden')) {
+            e.preventDefault();
+            const sInp = document.getElementById('search-input');
+            if (sInp) sInp.focus();
+          }
+        }
+        if (e.key === 'Escape') {
+          closePresetsModal();
+          closeDialog(null);
+          toggleCustomStateMenu(true);
+          toggleCustomPresetMenu(true);
+          toggleBotSelectorMenu(true);
+          if (!document.getElementById('view-session').classList.contains('hidden')) {
+            showList();
+          }
+        }
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+          if (!document.getElementById('view-session').classList.contains('hidden')) {
+            e.preventDefault();
+            saveChanges();
+          }
+        }
+      });
+    });
+  </script>
+</body>
+</html>
